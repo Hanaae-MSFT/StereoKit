@@ -34,6 +34,7 @@ struct asset_load_callback_t {
 struct asset_thread_t {
 	thrd_id_t id;
 	bool32_t  running;
+	int32_t   task_priority;
 };
 
 ///////////////////////////////////////////
@@ -55,9 +56,10 @@ bool32_t               asset_thread_enabled  = false;
 array_t<asset_task_t*> asset_thread_tasks    = {};
 mtx_t                  asset_thread_task_mtx = {};
 int32_t                asset_tasks_finished  = 0;
+int32_t                asset_tasks_current   = 0;
 
 int32_t asset_thread   (void *);
-void    asset_step_task();
+void    asset_step_task(asset_thread_t* thread);
 
 ///////////////////////////////////////////
 
@@ -347,7 +349,7 @@ void assets_update() {
 	// If we have no asset threads for some reason (like WASM), then we'll need
 	// to make sure assets still get loaded here!
 	if (asset_threads.count <= 0) {
-		asset_step_task();
+		asset_step_task(nullptr);
 	}
 
 	// destroy objects where the request came from another thread
@@ -456,15 +458,20 @@ int32_t assets_current_task() {
 ///////////////////////////////////////////
 
 int32_t assets_total_tasks() {
-	return asset_thread_tasks.count + asset_tasks_finished;
+	return asset_tasks_current + asset_tasks_finished;
 }
 
 ///////////////////////////////////////////
 
 int32_t assets_current_task_priority() {
+	int32_t result = INT_MAX;
 	if (asset_thread_tasks.count > 0)
-		return (int32_t)asset_thread_tasks[0]->sort;
-	return INT_MAX;
+		result = (int32_t)asset_thread_tasks[0]->sort;
+	for (int32_t i = 0; i < asset_threads.count; i++) {
+		if (result > asset_threads[i].task_priority)
+			result = asset_threads[i].task_priority;
+	}
+	return result;
 }
 
 ///////////////////////////////////////////
@@ -495,6 +502,7 @@ void assets_add_task(asset_task_t src_task) {
 
 	if (idx < 0) idx = ~idx;
 	asset_thread_tasks.insert(idx, task);
+	asset_tasks_current += 1;
 	mtx_unlock(&asset_thread_task_mtx);
 }
 
@@ -505,13 +513,16 @@ void assets_task_set_complexity(asset_task_t *task, int32_t complexity) {
 
 ///////////////////////////////////////////
 
-void asset_step_task() {
+void asset_step_task(asset_thread_t* thread) {
 	// Pop out the task we want to work on
 	mtx_lock(&asset_thread_task_mtx);
 	if (asset_thread_tasks.count <= 0) { mtx_unlock(&asset_thread_task_mtx); return; }
 	asset_task_t* task = asset_thread_tasks[0];
 	asset_thread_tasks.remove(0);
 	mtx_unlock(&asset_thread_task_mtx);
+
+	if (thread)
+		thread->task_priority = task->sort;
 
 	asset_load_action_t* action = &task->actions[task->action_curr];
 	if (action->thread_affinity == asset_thread_asset) {
@@ -571,6 +582,7 @@ void asset_step_task() {
 	} else {
 		// Or skip putting it back if it's complete :)
 		asset_tasks_finished += 1;
+		asset_tasks_current  -= 1;
 
 		// If it was successfully loaded, we'll want to notify on_load, but we
 		// do want to skip this if it was removed because of an issue during
@@ -585,17 +597,21 @@ void asset_step_task() {
 		assets_releaseref_threadsafe(task->asset);
 		sk_free(task);
 	}
+
+	if (thread)
+		thread->task_priority = INT_MAX;
 }
 
 ///////////////////////////////////////////
 
 int32_t asset_thread(void *thread_inst_obj) {
 	asset_thread_t* thread = (asset_thread_t*)thread_inst_obj;
-	thread->id      = thrd_id_current();
-	thread->running = true;
+	thread->id            = thrd_id_current();
+	thread->running       = true;
+	thread->task_priority = INT_MAX;
 
 	while (asset_thread_enabled || asset_thread_tasks.count>0) {
-		asset_step_task();
+		asset_step_task(thread);
 		thrd_yield();
 	}
 
@@ -637,7 +653,6 @@ void assets_block_for_priority(int32_t priority) {
 			return;
 		}
 	}
-	
 
 	// This handles if the user passes in INT_MAX
 	int32_t curr_priority = assets_current_task_priority();
