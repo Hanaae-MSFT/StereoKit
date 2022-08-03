@@ -94,7 +94,7 @@ namespace StereoKitDocumenter
 					.ToArray ();
 			}
 
-			int tests = RunSKTests();
+			int tests = 0;//RunSKTests();
 			if (tests != 0)
 				Environment.Exit(tests);
 
@@ -279,26 +279,28 @@ namespace StereoKitDocumenter
 
 		static string WriteIndex()
 		{
-			DocIndexFolder root      = new DocIndexFolder("Pages");
-			DocIndexFolder reference = new DocIndexFolder("Reference");
-			root.folders.Add(reference);
+			DocIndexFolder root = new DocIndexFolder("Pages", true);
 
-			for (int i = 0; i < classes.Count; i++)
+			foreach (string space in namespaces)
 			{
-				DocIndexFolder classFolder = new DocIndexFolder(classes[i].Name);
-				reference.folders.Add(classFolder);
+				int used = classes.FindIndex(c=>c.nameSpace == space);
+				if (used == -1) continue;
 
-				// Enums don't need child items, it's a little much.
-				if (classes[i].IsEnum) continue;
+				DocIndexFolder spaceFolder = new DocIndexFolder(space, true);
+				root.folders.Add(spaceFolder);
 
-				for (int f = 0; f < classes[i].fields.Count; f++)
+				foreach (DocClass currClass in classes)
 				{
-					classFolder.folders.Add(new DocIndexFolder(classes[i].fields[f].name));
-				}
+					if (currClass.nameSpace != space) continue;
 
-				for (int m = 0; m < classes[i].methods.Count; m++)
-				{
-					classFolder.folders.Add(new DocIndexFolder(classes[i].methods[m].ShowName));
+					DocIndexFolder classFolder = new DocIndexFolder(currClass.Name, true);
+					spaceFolder.folders.Add(classFolder);
+
+					// Enums don't need child items, it's a little much.
+					if (currClass.IsEnum) continue;
+
+					foreach (DocField  f in currClass.fields)  classFolder.folders.Add(new DocIndexFolder(f.name,     true));
+					foreach (DocMethod m in currClass.methods) classFolder.folders.Add(new DocIndexFolder(m.ShowName, true));
 				}
 			}
 
@@ -315,20 +317,20 @@ namespace StereoKitDocumenter
 						folder = root.folders.Find((a) => a.name == ex.category);
 					if (folder == null)
 					{
-						folder = new DocIndexFolder(ex.category, ex.SortIndex);
+						folder = new DocIndexFolder(ex.category, false, ex.SortIndex);
 						root.folders.Add(folder);
 					}
-					folder.folders.Add(new DocIndexFolder( ex.Name, ex.SortIndex));
+					folder.folders.Add(new DocIndexFolder( ex.Name, false, ex.SortIndex));
 				}
 			}
-			for (int i = 0; i < root.folders.Count; i++)
-			{
-				if (root.folders[i] == reference) continue;
-				root.folders[i].folders.Sort((a, b) => a.order - b.order);
-			}
 
-			root     .folders.Sort((a,b)=>string.Compare(a.name,b.name));
-			reference.folders.Sort((a,b)=>string.Compare(a.name,b.name));
+			// Sort all the folders!
+			foreach(var f in root.folders)
+			{
+				if (f.alphaSort) f.folders.Sort((a, b) => string.Compare(a.name, b.name));
+				else             f.folders.Sort((a, b) => a.order - b.order);
+			}
+			root.folders.Sort((a,b)=>string.Compare(a.name,b.name));
 
 			return root.ToString();
 		}

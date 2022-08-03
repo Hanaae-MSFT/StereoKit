@@ -7,12 +7,14 @@ namespace StereoKitDocumenter
 	{
 		public string name;
 		public int    order;
+		public bool   alphaSort;
 		public List<DocIndexFolder> folders = new List<DocIndexFolder>();
 
-		public DocIndexFolder(string aName, int aOrder = 0)
+		public DocIndexFolder(string aName, bool aAlphaSort, int aOrder = 0)
 		{
-			name  = aName;
-			order = aOrder;
+			name      = aName;
+			order     = aOrder;
+			alphaSort = aAlphaSort;
 		}
 
 		public override string ToString()
