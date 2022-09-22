@@ -367,7 +367,10 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Color              render_get_clear_color();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void               render_enable_skytex  (bool show_sky);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool               render_enabled_skytex ();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void               render_add_mesh       (IntPtr mesh, IntPtr material, in Matrix transform, Color color, RenderLayer layer);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void               render_add_mesh(IntPtr mesh, IntPtr material, in Matrix transform, Color color, RenderLayer layer);
+
+        [DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void render_add_custom_code([MarshalAs(UnmanagedType.FunctionPtr)] Action custom_code);
+
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void               render_add_model      (IntPtr model, in Matrix transform, Color color, RenderLayer layer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void               render_blit           (IntPtr to_rendertarget, IntPtr material);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void               render_screenshot     (string file, Vec3 from_viewpt, Vec3 at, int width, int height, float fov_degrees);

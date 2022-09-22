@@ -146,7 +146,7 @@ render_list_t           render_list_active      = -1;
 skg_bind_t              render_list_global_bind = { 1,  skg_stage_vertex | skg_stage_pixel, skg_register_constant };
 skg_bind_t              render_list_inst_bind   = { 2,  skg_stage_vertex | skg_stage_pixel, skg_register_constant };
 skg_bind_t              render_list_blit_bind   = { 2,  skg_stage_vertex | skg_stage_pixel, skg_register_constant };
-
+void        (*sk_custom_render_func)(void);
 ///////////////////////////////////////////
 
 void          render_set_material     (material_t material);
@@ -467,6 +467,11 @@ void render_add_mesh(mesh_t mesh, material_t material, const matrix &transform, 
 	render_list_add(&item);
 }
 
+void render_add_custom_code(void (*custom_code)(void))
+{
+	sk_custom_render_func = custom_code;
+}
+
 ///////////////////////////////////////////
 
 void render_add_model(model_t model, const matrix &transform, color128 color, render_layer_ layer) {
@@ -563,6 +568,10 @@ void render_draw_queue(const matrix *views, const matrix *projections, render_la
 ///////////////////////////////////////////
 
 void render_draw_matrix(const matrix* views, const matrix* projections, int32_t count, render_layer_ render_filter) {
+	if (sk_custom_render_func != nullptr)
+	{
+		sk_custom_render_func();
+	}
 	render_check_viewpoints();
 	render_draw_queue(views, projections, render_filter, count);
 	render_check_screenshots();
