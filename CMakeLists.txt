@@ -96,7 +96,10 @@ if (ANDROID)
   set(ANDROID_LIBS
     log
     android
+	vulkan
     EGL)
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -g")
+
   if (SK_DYNAMIC_OPENXR)
     add_definitions("-DSK_DYNAMIC_OPENXR")
   endif()

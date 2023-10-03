@@ -58,7 +58,10 @@ bool platform_init() {
 		case skg_log_critical: log_errf ("[<~mag>sk_gpu<~clr>] %s", text); break;
 		}
 	});
-	if (skg_init(settings->app_name, luid) <= 0) {
+
+	skg_init_callback init_callback = openxr_skg_init;
+
+	if (skg_init(settings->app_name, luid, init_callback) <= 0) {
 		log_fail_reason(95, log_error, "Failed to initialize sk_gpu!");
 		return false;
 	}

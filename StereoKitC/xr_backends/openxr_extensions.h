@@ -53,15 +53,17 @@
 	#define XR_TYPE_GRAPHICS_BINDING XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR
 
 #elif defined(XR_USE_GRAPHICS_API_VULKAN)
-	#define XR_GFX_EXTENSION XR_KHR_VULKAN_ENABLE_EXTENSION_NAME
-	#define XrSwapchainImage XrSwapchainImageVulkanKHR
-	#define XR_TYPE_SWAPCHAIN_IMAGE XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR
-	#define XrGraphicsRequirements XrGraphicsRequirementsVulkanKHR
-	#define XR_TYPE_GRAPHICS_REQUIREMENTS XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR
-	#define PFN_xrGetGraphicsRequirementsKHR PFN_xrGetVulkanGraphicsRequirementsKHR
-	#define NAME_xrGetGraphicsRequirementsKHR "xrGetVulkanGraphicsRequirementsKHR"
-	#define XrGraphicsBinding XrGraphicsBindingVulkanKHR
-	#define XR_TYPE_GRAPHICS_BINDING XR_TYPE_GRAPHICS_BINDING_VULKAN_KHR
+	#include <jni.h>
+	#include <vulkan/vulkan.h>
+	#define XR_GFX_EXTENSION XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME
+	#define XrSwapchainImage XrSwapchainImageVulkan2KHR
+	#define XR_TYPE_SWAPCHAIN_IMAGE XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR
+	#define XrGraphicsRequirements XrGraphicsRequirementsVulkan2KHR
+	#define XR_TYPE_GRAPHICS_REQUIREMENTS XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR
+	#define NAME_xrGetGraphicsRequirementsKHR "xrGetVulkanGraphicsRequirements2KHR"
+	#define PFN_xrGetGraphicsRequirementsKHR PFN_xrGetVulkanGraphicsRequirements2KHR
+	#define XrGraphicsBinding XrGraphicsBindingVulkan2KHR
+	#define XR_TYPE_GRAPHICS_BINDING XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR
 
 #elif defined(XR_USE_GRAPHICS_API_OPENGL_ES)
 	#include <EGL/egl.h>
@@ -191,7 +193,11 @@ namespace sk {
 	_(xrSetColorSpaceFB)                         \
 	_(xrCreateSpatialGraphNodeSpaceMSFT)         \
 	_(xrCreateDebugUtilsMessengerEXT)            \
-	_(xrDestroyDebugUtilsMessengerEXT)
+	_(xrDestroyDebugUtilsMessengerEXT)           \
+	_(xrCreateVulkanInstanceKHR)                 \
+	_(xrCreateVulkanDeviceKHR)                   \
+	_(xrGetVulkanGraphicsDevice2KHR)
+
 
 #if defined(_WIN32)
 #define FOR_EACH_PLATFORM_FUNCTION(_)                \

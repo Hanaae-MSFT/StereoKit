@@ -7,7 +7,8 @@
 	#define XR_USE_PLATFORM_ANDROID
 	#define XR_USE_TIMESPEC
 	#define XR_TIME_EXTENSION XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME
-	#define XR_USE_GRAPHICS_API_OPENGL_ES
+	//#define XR_USE_GRAPHICS_API_OPENGL_ES
+	#define XR_USE_GRAPHICS_API_VULKAN
 
 #elif defined(SK_OS_LINUX)
 	#if defined(SKG_LINUX_EGL)
@@ -69,6 +70,8 @@ bool32_t    openxr_get_gaze_space(pose_t* out_pose, XrTime& out_gaze_sample_time
 const char* openxr_string   (XrResult result);
 void        openxr_set_origin_offset(pose_t offset);
 bool        openxr_get_stage_bounds(vec2* out_size, pose_t* out_pose, XrTime time);
+
+void openxr_skg_init(void* info, void* result);
 
 extern XrSpace    xrc_space_grip[2];
 extern XrSpace    xr_app_space;

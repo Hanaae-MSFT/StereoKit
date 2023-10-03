@@ -42,6 +42,7 @@
 
 #if defined(SK_OS_ANDROID) || defined(SK_OS_LINUX)
 #include <time.h>
+#include <vulkan/vulkan.h>
 #endif
 
 namespace sk {
@@ -150,6 +151,106 @@ bool openxr_get_stage_bounds(vec2 *out_size, pose_t *out_pose, XrTime time) {
 
 
 	return true;
+}
+
+///////////////////////////////////////////
+void openxr_skg_init(void* info, void* result)
+{
+#if defined(SK_OS_ANDROID) // TODO-Hanaa: need to define vulkan
+	VkInstanceCreateInfo* vk_instance_info = (VkInstanceCreateInfo*)info;
+	skg_device_t* device = (skg_device_t*)result;
+
+    XrGraphicsRequirementsVulkan2KHR graphicsRequirements{ XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR };
+    if (xr_extensions.xrGetGraphicsRequirementsKHR(xr_instance, xr_system_id, &graphicsRequirements) != XR_SUCCESS)
+	{
+		log_err("xr_extensions.xrGetVulkanGraphicsRequirements2KHR failed!");
+	}
+
+    XrVulkanInstanceCreateInfoKHR create_info = { XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR };
+    create_info.systemId = xr_system_id;
+    create_info.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    create_info.vulkanCreateInfo = vk_instance_info;
+    create_info.vulkanAllocator = nullptr;
+
+	VkResult vk_res = VK_SUCCESS;
+	XrResult res = xr_extensions.xrCreateVulkanInstanceKHR(xr_instance, &create_info, &(device->instance), &vk_res);
+	if (res != XR_SUCCESS || vk_res != VK_SUCCESS) {
+		log_errf("OpenXR failed to create vulkan instance, xr error code (%d), vk error code (%d)", res, vk_res);
+	}
+	else
+	{
+		log_write(log_inform, "OpenXR succeeded to create vulkan instance");
+	}
+
+    XrVulkanGraphicsDeviceGetInfoKHR device_get_info{ XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR };
+    device_get_info.systemId = xr_system_id;
+    device_get_info.vulkanInstance = device->instance;
+    if (xr_extensions.xrGetVulkanGraphicsDevice2KHR(xr_instance, &device_get_info, &(device->physical_device)) != XR_SUCCESS)
+	{
+		log_err("OpenXR failed to get physical vulkan device");
+	}
+
+    VkDeviceQueueCreateInfo queue_info{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+    float queue_priority = 0;
+    queue_info.queueCount = 1;
+    queue_info.pQueuePriorities = &queue_priority;
+
+	uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device->physical_device, &queue_family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> queue_family_props(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(device->physical_device, &queue_family_count, queue_family_props.data());
+
+    for (uint32_t i = 0; i < queue_family_count; ++i)
+    {
+        // Only need graphics (not presentation) for draw queue
+        if ((queue_family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u)
+        {
+			device->gfx_queue_idx = i;
+			queue_info.queueFamilyIndex = i;
+            break;
+        }
+    }
+
+    uint32_t ext_count = 0;
+	vkEnumerateDeviceExtensionProperties(device->physical_device , nullptr, &ext_count, nullptr);
+    std::vector<VkExtensionProperties> available_extensions(ext_count);
+	vkEnumerateDeviceExtensionProperties(device->physical_device, nullptr, &ext_count, available_extensions.data());
+
+    for (const auto& ext_props : available_extensions)
+    {
+        log_writef(log_inform, "Available Device Extension name: (%s)", ext_props.extensionName);
+    }
+
+    VkPhysicalDeviceFeatures2 features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+
+	// TODO-Hanaa: Support tiling & density map, device extensions?
+    
+	VkDeviceCreateInfo device_info{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+    device_info.pNext = &features;
+    device_info.queueCreateInfoCount = 1;
+    device_info.pQueueCreateInfos = &queue_info;
+    device_info.enabledLayerCount = 0;
+    device_info.ppEnabledLayerNames = nullptr;
+    device_info.enabledExtensionCount = 0;
+    device_info.ppEnabledExtensionNames = nullptr;
+    device_info.pEnabledFeatures = nullptr;
+
+    XrVulkanDeviceCreateInfoKHR xr_device_info{ XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR };
+    xr_device_info.systemId = xr_system_id;
+    xr_device_info.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    xr_device_info.vulkanCreateInfo = &device_info;
+    xr_device_info.vulkanPhysicalDevice = device->physical_device;
+    xr_device_info.vulkanAllocator = nullptr;
+	res = xr_extensions.xrCreateVulkanDeviceKHR(xr_instance, &xr_device_info, &(device->device), &vk_res);
+    if (res != XR_SUCCESS || vk_res != VK_SUCCESS) {
+        log_errf("OpenXR failed to create vulkan device, xr error code (%d), vk error code (%d)", res, vk_res);
+}
+    else
+    {
+        log_write(log_inform, "OpenXR succeeded to create vulkan device");
+    }
+
+#endif
 }
 
 ///////////////////////////////////////////
@@ -319,6 +420,17 @@ void *openxr_get_luid() {
 	}
 
 	return (void *)&luid_requirement.adapterLuid;
+#elif defined(XR_USE_GRAPHICS_API_VULKAN)
+	if (!openxr_create_system()) return nullptr;
+
+	// Get an extension function, and check it for our requirements
+    PFN_xrGetGraphicsRequirementsKHR xrGetGraphicsRequirementsKHR;
+    if (XR_FAILED(xrGetInstanceProcAddr(xr_instance, NAME_xrGetGraphicsRequirementsKHR, (PFN_xrVoidFunction*)(&xrGetGraphicsRequirementsKHR))) ||
+        XR_FAILED(xrGetGraphicsRequirementsKHR(xr_instance, xr_system_id, &luid_requirement))) {
+        xrDestroyInstance(xr_instance);
+        return nullptr;
+    }
+	return (void*)&luid_requirement;
 #else
 	return nullptr;
 #endif
@@ -415,6 +527,8 @@ bool openxr_init() {
 	gfx_binding.display = (EGLDisplay)platform._egl_display;
 	gfx_binding.config  = (EGLConfig )platform._egl_config;
 	gfx_binding.context = (EGLContext)platform._egl_context;
+#elif defined(XR_USE_GRAPHICS_API_VULKAN)
+	assert(false);
 #elif defined(XR_USE_GRAPHICS_API_D3D11)
 	gfx_binding.device = (ID3D11Device*)platform._d3d11_device;
 #endif

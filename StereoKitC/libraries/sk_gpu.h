@@ -33,6 +33,8 @@ sk_gpu.h
 #define SKG_OPENGL
 #elif defined( _WIN32 )
 #define SKG_DIRECT3D11
+#elif defined(__ANDROID__)
+#define SKG_VULKAN
 #else
 #define SKG_OPENGL
 #endif
@@ -64,6 +66,11 @@ sk_gpu.h
 	#endif
 #endif
 
+#if defined(SKG_VULKAN)
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_android.h>
+#endif
+
 // Add definitions for how/if we want the functions exported
 #ifdef __GNUC__
 	#define SKG_API
@@ -80,6 +87,8 @@ sk_gpu.h
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <assert.h> // TODO-Hanaa: remove when impl is done
+#include <vector>
 
 ///////////////////////////////////////////
 
@@ -400,6 +409,94 @@ typedef struct skg_platform_data_t {
 #elif defined(SKG_DIRECT3D12)
 
 #elif defined(SKG_VULKAN)
+typedef struct skg_device_t {
+	VkInstance instance;
+	VkPhysicalDevice physical_device;
+	VkDevice device;
+	VkQueue gfx_queue;
+	uint32_t gfx_queue_idx;
+} skg_device_t;
+
+typedef struct skg_context_t {
+
+	VkCommandPool cmd_pool;
+	VkCommandPool transient_cmd_pool;
+
+    PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT;
+    PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT;
+	VkDebugReportCallbackEXT debug_report;
+};
+
+typedef struct skg_buffer_t {
+    skg_use_         use;
+    skg_buffer_type_ type;
+    uint32_t         stride;
+    // TODO-Hanaa: native code here
+} skg_buffer_t;
+
+typedef struct skg_computebuffer_t {
+    skg_read_                  read_write;
+    skg_buffer_t               buffer;
+    // TODO-Hanaa: native code here
+} skg_computebuffer_t;
+
+typedef struct skg_mesh_t {
+    skg_buffer_t* _ind_buffer;
+    skg_buffer_t* _vert_buffer;
+} skg_mesh_t;
+
+typedef struct skg_shader_stage_t {
+    skg_stage_         type;
+    void* _shader;
+    // TODO-Hanaa: native code here
+} skg_shader_stage_t;
+
+typedef struct skg_shader_t {
+    skg_shader_meta_t* meta;
+
+ //   VkShaderModule _vertex;
+ //   VkShaderModule _pixel;
+ //   VkShaderModule _compute;
+
+	// TODO-Hanaa: native code here
+} skg_shader_t;
+
+typedef struct skg_pipeline_t {
+    skg_transparency_        transparency;
+    skg_cull_                cull;
+    bool                     wireframe;
+    bool                     depth_write;
+    bool                     scissor;
+    skg_depth_test_          depth_test;
+    skg_shader_meta_t* meta;
+
+	// TODO-Hanaa: Native stuff here
+} skg_pipeline_t;
+
+typedef struct skg_tex_t {
+    int32_t                    width;
+    int32_t                    height;
+    int32_t                    array_count;
+    int32_t                    array_start;
+    int32_t                    multisample;
+    skg_use_                   use;
+    skg_tex_type_              type;
+    skg_tex_fmt_               format;
+    skg_mip_                   mips;
+	// TODO-Hanaa: Native stuff here
+} skg_tex_t;
+
+typedef struct skg_swapchain_t {
+    int32_t          width;
+    int32_t          height;
+    skg_tex_t        _target;
+    skg_tex_t        _depth;
+	// TODO-Hanaa: Native stuff here
+} skg_swapchain_t;
+
+typedef struct skg_platform_data_t {
+} skg_platform_data_t;
+
 
 #elif defined(SKG_OPENGL)
 
@@ -562,8 +659,10 @@ typedef struct skg_platform_data_t {
 
 ///////////////////////////////////////////
 
+typedef void (*skg_init_callback)(void* info, void* result);
+
 SKG_API void                skg_setup_xlib               (void *dpy, void *vi, void *fbconfig, void *drawable);
-SKG_API int32_t             skg_init                     (const char *app_name, void *adapter_id);
+SKG_API int32_t             skg_init                     (const char *app_name, void *adapter_id, skg_init_callback init_callback = nullptr);
 SKG_API const char*         skg_adapter_name             ();
 SKG_API void                skg_shutdown                 ();
 SKG_API void                skg_callback_log             (void (*callback)(skg_log_ level, const char *text));
@@ -731,8 +830,455 @@ SKG_API void                    skg_shader_meta_release        (skg_shader_meta_
 ///////////////////////////////////////////
 
 #ifdef SKG_IMPL
+#ifdef SKG_VULKAN
+skg_device_t skg_device;
+skg_context_t skg_context;
 
-#ifdef SKG_DIRECT3D11
+static VKAPI_ATTR VkBool32 VKAPI_CALL skg_debug_report_callback(
+    VkDebugReportFlagsEXT flags,
+    VkDebugReportObjectTypeEXT objectType,
+    uint64_t object,
+    size_t location,
+    int32_t messageCode,
+    const char* pLayerPrefix,
+    const char* pMessage,
+    void* pUserData)
+{
+	//TODO-hanaa: implement
+	//assert(false);
+}
+
+int32_t skg_init(const char* app_name, void* luid, skg_init_callback init_callback) {
+
+    VkApplicationInfo app = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
+    app.pApplicationName = "Stereokit";
+    app.pEngineName = "sk_gpu";
+    app.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    app.apiVersion = VK_API_VERSION_1_0;
+
+    const char* const ext[] = {
+		"VK_EXT_debug_report",
+		"VK_KHR_android_surface"
+    };
+
+	const char* const layers[] = {
+        "VK_LAYER_KHRONOS_validation"
+	};
+
+	uint32_t layer_count = 0;
+	vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+
+	std::vector<VkLayerProperties> availableLayers(layer_count);
+	vkEnumerateInstanceLayerProperties(&layer_count, availableLayers.data());
+
+	skg_logf(skg_log_info, "Available layer count: (%d)", layer_count);
+
+	for (const auto& layer_props : availableLayers)
+	{
+		skg_logf(skg_log_info, "Available Layer name: (%s)", layer_props.layerName);
+	}
+
+    uint32_t extension_count = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
+
+    std::vector<VkExtensionProperties> availableExtensions(extension_count);
+	vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, availableExtensions.data());
+
+    skg_logf(skg_log_info, "Available extension count: (%d)", extension_count);
+
+    for (const auto& ext_props : availableExtensions)
+    {
+        skg_logf(skg_log_info, "Available Instance Extension name: (%s)", ext_props.extensionName);
+    }
+
+	VkInstanceCreateInfo instance_info = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+	instance_info.pApplicationInfo = &app;
+	instance_info.enabledExtensionCount = 2;
+	instance_info.ppEnabledExtensionNames = ext;
+	instance_info.enabledLayerCount = 1;
+	instance_info.ppEnabledLayerNames = layers;
+
+	if (init_callback != nullptr) {
+		skg_log(skg_log_info, "Executintg skg init callback");
+		init_callback(&instance_info, &skg_device);
+	}
+	else {
+		skg_log(skg_log_critical, "skg init callback is nullptr!");
+		assert(false);
+	}
+
+	vkGetDeviceQueue(skg_device.device, skg_device.gfx_queue_idx, 0, &skg_device.gfx_queue);
+
+	skg_context.vkCreateDebugReportCallbackEXT =
+		(PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(skg_device.instance, "vkCreateDebugReportCallbackEXT");
+	skg_context.vkDestroyDebugReportCallbackEXT =
+		(PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(skg_device.instance, "vkDestroyDebugReportCallbackEXT");
+
+	VkDebugReportCallbackCreateInfoEXT debug_info{ VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT };
+    debug_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    debug_info.flags |=
+        VK_DEBUG_REPORT_INFORMATION_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+	debug_info.pfnCallback = skg_debug_report_callback;
+	if (skg_context.vkCreateDebugReportCallbackEXT(skg_device.instance, &debug_info, nullptr, &skg_context.debug_report) != VK_SUCCESS)
+	{
+        skg_log(skg_log_critical, "Failed to create vulkan debug callback!");
+	}
+
+    VkCommandPoolCreateInfo cmd_pool_info = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+    cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    cmd_pool_info.queueFamilyIndex = skg_device.gfx_queue_idx;
+    vkCreateCommandPool(skg_device.device, &cmd_pool_info, 0, &skg_context.cmd_pool);
+
+    // A command pool for short-lived command buffers
+    cmd_pool_info = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+    cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    cmd_pool_info.queueFamilyIndex = skg_device.gfx_queue_idx;
+    vkCreateCommandPool(skg_device.device, &cmd_pool_info, 0, &skg_context.transient_cmd_pool);
+
+	// descriptor pool
+	// surface
+	// semaphore
+	//fence
+
+	assert(false);
+	skg_log(skg_log_warning, "skg not implemented");
+	return 0;
+}
+
+const char* skg_adapter_name() {
+	assert(false);
+}
+
+void skg_shutdown() {
+    vkDeviceWaitIdle(skg_device.device);
+    vkDestroyCommandPool(skg_device.device, skg_context.transient_cmd_pool, 0);
+    vkDestroyCommandPool(skg_device.device, skg_context.cmd_pool, 0);
+
+	vkDestroyDevice(skg_device.device, nullptr);
+	vkDestroyInstance(skg_device.instance, nullptr);
+	assert(false);
+}
+
+skg_platform_data_t skg_get_platform_data() {
+	assert(false);
+	return {};
+}
+
+bool skg_capability(skg_cap_ capability) {
+	assert(false);
+}
+
+void skg_draw_begin() {
+	assert(false);
+}
+
+void skg_draw(int32_t index_start, int32_t index_base, int32_t index_count, int32_t instance_count) {
+	assert(false);
+}
+
+void skg_compute(uint32_t thread_count_x, uint32_t thread_count_y, uint32_t thread_count_z) {
+	assert(false);
+}
+
+void skg_viewport(const int32_t* xywh) {
+	assert(false);
+}
+
+void skg_viewport_get(int32_t* out_xywh) {
+	assert(false);
+}
+
+void skg_scissor(const int32_t* xywh) {
+	assert(false);
+}
+
+void skg_target_clear(bool depth, const float* clear_color_4) {
+	assert(false);
+}
+
+skg_buffer_t skg_buffer_create(const void* data, uint32_t size_count, uint32_t size_stride, skg_buffer_type_ type, skg_use_ use) {
+	assert(false);
+	return {};
+}
+
+void skg_buffer_name(skg_buffer_t* buffer, const char* name) {
+	assert(false);
+}
+
+bool skg_buffer_is_valid(const skg_buffer_t* buffer) {
+	assert(false);
+	return false;
+}
+
+void skg_buffer_set_contents(skg_buffer_t* buffer, const void* data, uint32_t size_bytes) {
+	assert(false);
+}
+
+void skg_buffer_get_contents(const skg_buffer_t* buffer, void* ref_buffer, uint32_t buffer_size) {
+	assert(false);
+}
+
+void skg_buffer_bind(const skg_buffer_t* buffer, skg_bind_t slot_vc, uint32_t offset_vi) {
+	assert(false);
+}
+
+void skg_buffer_clear(skg_bind_t bind) {
+	assert(false);
+}
+
+void skg_buffer_destroy(skg_buffer_t* buffer) {
+	assert(false);
+}
+
+skg_mesh_t skg_mesh_create(const skg_buffer_t* vert_buffer, const skg_buffer_t* ind_buffer) {
+	assert(false);
+	return {};
+}
+
+void skg_mesh_name(skg_mesh_t* mesh, const char* name) {
+	assert(false);
+}
+
+void skg_mesh_set_verts(skg_mesh_t* mesh, const skg_buffer_t* vert_buffer) {
+	assert(false);
+}
+
+void skg_mesh_set_inds(skg_mesh_t* mesh, const skg_buffer_t* ind_buffer) {
+	assert(false);
+}
+
+void skg_mesh_bind(const skg_mesh_t* mesh) {
+	assert(false);
+}
+
+void skg_mesh_destroy(skg_mesh_t* mesh) {
+	assert(false);
+}
+
+skg_shader_stage_t  skg_shader_stage_create(const void* shader_data, size_t shader_size, skg_stage_ type) {
+	assert(false);
+	return {};
+}
+
+void skg_shader_stage_destroy(skg_shader_stage_t* stage) {
+	assert(false);
+}
+
+skg_shader_t skg_shader_create_manual(skg_shader_meta_t* meta, skg_shader_stage_t v_shader, skg_shader_stage_t p_shader, skg_shader_stage_t c_shader) {
+	assert(false);
+	return {};
+}
+
+void skg_shader_name(skg_shader_t* shader, const char* name) {
+	assert(false);
+}
+
+bool skg_shader_is_valid(const skg_shader_t* shader) {
+	assert(false);
+	return false;
+}
+
+void skg_shader_compute_bind(const skg_shader_t* shader) {
+	assert(false);
+}
+
+void skg_shader_destroy(skg_shader_t* shader) {
+	assert(false);
+}
+
+skg_pipeline_t skg_pipeline_create(skg_shader_t* shader) {
+	assert(false);
+	return {};
+}
+
+void skg_pipeline_name(skg_pipeline_t* pipeline, const char* name) {
+	assert(false);
+}
+
+void skg_pipeline_bind(const skg_pipeline_t* pipeline) {
+	assert(false);
+}
+
+void skg_pipeline_set_transparency(skg_pipeline_t* pipeline, skg_transparency_ transparency) {
+	assert(false);
+}
+
+skg_transparency_   skg_pipeline_get_transparency(const skg_pipeline_t* pipeline) {
+	assert(false);
+	return {};
+}
+
+void skg_pipeline_set_cull(skg_pipeline_t* pipeline, skg_cull_ cull) {
+	assert(false);
+}
+
+skg_cull_ skg_pipeline_get_cull(const skg_pipeline_t* pipeline) {
+	assert(false);
+	return {};
+}
+
+void skg_pipeline_set_wireframe(skg_pipeline_t* pipeline, bool wireframe) {
+	assert(false);
+}
+
+bool skg_pipeline_get_wireframe(const skg_pipeline_t* pipeline) {
+	assert(false);
+	return false;
+}
+
+void skg_pipeline_set_depth_write(skg_pipeline_t* pipeline, bool write) {
+	assert(false);
+}
+
+bool skg_pipeline_get_depth_write(const skg_pipeline_t* pipeline) {
+	assert(false);
+	return false;
+}
+
+void skg_pipeline_set_depth_test(skg_pipeline_t* pipeline, skg_depth_test_ test) {
+	assert(false);
+}
+
+skg_depth_test_  skg_pipeline_get_depth_test(const skg_pipeline_t* pipeline) {
+	assert(false);
+	return {};
+}
+
+void skg_pipeline_set_scissor(skg_pipeline_t* pipeline, bool enable) {
+	assert(false);
+}
+
+bool skg_pipeline_get_scissor(const skg_pipeline_t* pipeline) {
+	assert(false);
+	return false;
+}
+
+void skg_pipeline_destroy(skg_pipeline_t* pipeline) {
+	assert(false);
+}
+
+skg_swapchain_t skg_swapchain_create(void* hwnd, skg_tex_fmt_ format, skg_tex_fmt_ depth_format, int32_t requested_width, int32_t requested_height) {
+	assert(false);
+	return {};
+}
+
+void skg_swapchain_resize(skg_swapchain_t* swapchain, int32_t width, int32_t height) {
+	assert(false);
+}
+
+void skg_swapchain_present(skg_swapchain_t* swapchain) {
+	assert(false);
+}
+
+void skg_swapchain_bind(skg_swapchain_t* swapchain) {
+	assert(false);
+}
+
+void skg_swapchain_destroy(skg_swapchain_t* swapchain) {
+	assert(false);
+}
+
+skg_tex_t skg_tex_create_from_existing(void* native_tex, skg_tex_type_ type, skg_tex_fmt_ format, int32_t width, int32_t height, int32_t array_count) {
+	assert(false);
+	return {};
+}
+
+skg_tex_t skg_tex_create_from_layer(void* native_tex, skg_tex_type_ type, skg_tex_fmt_ format, int32_t width, int32_t height, int32_t array_layer) {
+	assert(false);
+	return {};
+}
+
+skg_tex_t skg_tex_create(skg_tex_type_ type, skg_use_ use, skg_tex_fmt_ format, skg_mip_ mip_maps) {
+	assert(false);
+	return {};
+}
+
+void skg_tex_name(skg_tex_t* tex, const char* name) {
+	assert(false);
+}
+
+bool skg_tex_is_valid(const skg_tex_t* tex) {
+	assert(false);
+	return false;
+}
+
+void skg_tex_copy_to(const skg_tex_t* tex, skg_tex_t* destination) {
+	assert(false);
+}
+
+void skg_tex_copy_to_swapchain(const skg_tex_t* tex, skg_swapchain_t* destination) {
+	assert(false);
+}
+
+void skg_tex_attach_depth(skg_tex_t* tex, skg_tex_t* depth) {
+	assert(false);
+}
+
+void skg_tex_settings(skg_tex_t* tex, skg_tex_address_ address, skg_tex_sample_ sample, int32_t anisotropy) {
+	assert(false);
+}
+
+void skg_tex_set_contents(skg_tex_t* tex, const void* data, int32_t width, int32_t height) {
+	assert(false);
+}
+
+void skg_tex_set_contents_arr(skg_tex_t* tex, const void** data_frames, int32_t data_frame_count, int32_t width, int32_t height, int32_t multisample) {
+	assert(false);
+}
+
+bool skg_tex_get_contents(skg_tex_t* tex, void* ref_data, size_t data_size) {
+	assert(false);
+	return false;
+}
+
+bool skg_tex_get_mip_contents(skg_tex_t* tex, int32_t mip_level, void* ref_data, size_t data_size) {
+	assert(false);
+	return false;
+}
+
+bool skg_tex_get_mip_contents_arr(skg_tex_t* tex, int32_t mip_level, int32_t arr_index, void* ref_data, size_t data_size) {
+	assert(false);
+	return false;
+}
+
+void* skg_tex_get_native(const skg_tex_t* tex) {
+	assert(false);
+	return nullptr;
+}
+
+void skg_tex_bind(const skg_tex_t* tex, skg_bind_t bind) {
+	assert(false);
+}
+
+void skg_tex_clear(skg_bind_t bind) {
+	assert(false);
+}
+
+void skg_tex_target_bind(skg_tex_t* render_target) {
+	assert(false);
+}
+
+skg_tex_t* skg_tex_target_get() {
+	assert(false);
+	return nullptr;
+}
+
+void skg_tex_destroy(skg_tex_t* tex) {
+	assert(false);
+}
+
+int64_t skg_tex_fmt_to_native(skg_tex_fmt_ format) {
+	assert(false);
+	return 0;
+}
+
+skg_tex_fmt_ skg_tex_fmt_from_native(int64_t format) {
+	assert(false);
+	return {};
+}
+
+#elif defined(SKG_DIRECT3D11)
 ///////////////////////////////////////////
 // Direct3D11 Implementation             //
 ///////////////////////////////////////////
@@ -783,7 +1329,7 @@ void skg_downsample_4(T *data, T data_max, int32_t width, int32_t height, T **ou
 
 ///////////////////////////////////////////
 
-int32_t skg_init(const char *, void *adapter_id) {
+int32_t skg_init(const char *, void *adapter_id, skg_init_func /*func*/) {
 	UINT creation_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 #if defined(_DEBUG)
 	creation_flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -3355,7 +3901,7 @@ void skg_setup_xlib(void *dpy, void *vi, void *fbconfig, void *drawable) {
 
 ///////////////////////////////////////////
 
-int32_t skg_init(const char *app_name, void *adapter_id) {
+int32_t skg_init(const char *app_name, void *adapter_id, skg_init_func /*func*/) {
 #if   defined(_SKG_GL_LOAD_WGL)
 	int32_t result = gl_init_wgl();
 #elif defined(_SKG_GL_LOAD_EGL)

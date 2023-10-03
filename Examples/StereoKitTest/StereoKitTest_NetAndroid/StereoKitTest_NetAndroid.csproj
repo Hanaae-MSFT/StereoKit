@@ -32,9 +32,9 @@
 	</ItemGroup>
 
 	<PropertyGroup>
-		<AndroidManifest          >AndroidManifest.xml</AndroidManifest>
+		<AndroidManifest>AndroidManifest.xml</AndroidManifest>
 		<MonoAndroidResourcePrefix>Resources</MonoAndroidResourcePrefix>
-		<MonoAndroidAssetsPrefix  >Assets</MonoAndroidAssetsPrefix>
+		<MonoAndroidAssetsPrefix>Assets</MonoAndroidAssetsPrefix>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -56,6 +56,17 @@
 		    folder, and $(ProjectDir) doesn't work.-->
 		<PreBuildEvent Condition="'$(TestBuildMode)'=='ARM64'">cd ..\..\..\..\..\..\ &amp; cmake --preset Android_Arm64_$(Configuration) &amp; cmake --build --preset Android_Arm64_$(Configuration)</PreBuildEvent>
 		<PreBuildEvent Condition="'$(TestBuildMode)'=='x64'">cd ..\..\..\..\..\..\ &amp; cmake --preset Android_x64_$(Configuration) &amp; cmake --build --preset Android_x64_$(Configuration)</PreBuildEvent>
+		<PlatformTarget>ARM64</PlatformTarget>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+	  <Debugger>Native</Debugger>
+	  <JavaMaximumHeapSize>4G</JavaMaximumHeapSize>
+	  <DebugType>full</DebugType>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+	  <Debugger>Native</Debugger>
+	  <JavaMaximumHeapSize>4G</JavaMaximumHeapSize>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 	<Target Name="SKTestRebuildAndroid" AfterTargets="Clean">
 		<RemoveDir Condition="'$(TestBuildMode)'=='ARM64'" Directories="..\..\..\..\..\..\bin\intermediate\cmake\Android_ARM64_$(Configuration)" />
@@ -70,13 +81,25 @@
 
 	<ItemGroup>
 		<!--<None                 Visible="false" Condition="'$(TestBuildMode)'=='ARM64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\arm64-v8a\$(Configuration)\libStereoKitC.so.dbg"             CopyToOutputDirectory="PreserveNewest" Abi="arm64-v8a" />-->
-		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='ARM64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\arm64-v8a\$(Configuration)\libStereoKitC.so"                 CopyToOutputDirectory="PreserveNewest" Abi="arm64-v8a" />
+		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='ARM64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\arm64-v8a\$(Configuration)\libStereoKitC.so" CopyToOutputDirectory="PreserveNewest" Abi="arm64-v8a" />
 		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='ARM64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\arm64-v8a\$(Configuration)\$(SKOpenXRLoader.ToLower())\*.so" CopyToOutputDirectory="PreserveNewest" Abi="arm64-v8a" />
-		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='ARM64'" Include="$(SKOpenXRLoaderFolder)\$(SKOpenXRLoader)\arm64\*.so"                                                         CopyToOutputDirectory="PreserveNewest" Abi="arm64-v8a" />
+		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='ARM64'" Include="$(SKOpenXRLoaderFolder)\$(SKOpenXRLoader)\arm64\*.so" CopyToOutputDirectory="PreserveNewest" Abi="arm64-v8a" />
 		
 		<!--<None                 Visible="false" Condition="'$(TestBuildMode)'=='x64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\x86_64\$(Configuration)\libStereoKitC.so.dbg"             CopyToOutputDirectory="PreserveNewest" Abi="x86_64" />-->
-		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='x64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\x86_64\$(Configuration)\libStereoKitC.so"                 CopyToOutputDirectory="PreserveNewest" Abi="x86_64" />
+		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='x64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\x86_64\$(Configuration)\libStereoKitC.so" CopyToOutputDirectory="PreserveNewest" Abi="x86_64" />
 		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='x64'" Include="$(ProjectDir)..\..\..\bin\distribute\bin\Android\x86_64\$(Configuration)\$(SKOpenXRLoader.ToLower())\*.so" CopyToOutputDirectory="PreserveNewest" Abi="x86_64" />
-		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='x64'" Include="$(SKOpenXRLoaderFolder)\$(SKOpenXRLoader)\arm64\*.so"                                                      CopyToOutputDirectory="PreserveNewest" Abi="x86_64" />
+		<AndroidNativeLibrary Visible="false" Condition="'$(TestBuildMode)'=='x64'" Include="$(SKOpenXRLoaderFolder)\$(SKOpenXRLoader)\x86_64\*.so" CopyToOutputDirectory="PreserveNewest" Abi="x86_64" /> <!-- the arch here is wrong -->
+
 	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="libVkLayer_khronos_validation.so" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <AndroidNativeLibrary Update="libVkLayer_khronos_validation.so">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </AndroidNativeLibrary>
+	</ItemGroup>
+
 </Project>

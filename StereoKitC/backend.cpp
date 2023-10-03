@@ -168,6 +168,8 @@ backend_graphics_ backend_graphics_get() {
 	return backend_graphics_opengles_egl;
 #elif defined(_SKG_GL_WEB)
 	return backend_graphics_webgl;
+#elif defined(SKG_VULKAN)
+	return backend_graphics_vulkan;
 #else
 	return backend_graphics_none;
 #endif
